@@ -1,0 +1,4 @@
+.build/
+node_modules/
+omegga.d.ts
+disabled.omegga
