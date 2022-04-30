@@ -4,7 +4,7 @@ A set of events to help with minigame plugins
 
 ## Install
 
-`omegga install gh:mrware/minigameevents`
+`omegga install gh:mraware/minigameevents`
 
 
 ## Types
