@@ -215,8 +215,6 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
 
     const globalIndex = +rulesets.find(ruleset => ruleset.groups?.name === 'GLOBAL').groups?.index;
 
-    console.log(globalIndex);
-
     return rulesets.map(ruleset => {
       let index = +ruleset.groups?.index;
       if (globalIndex || globalIndex === 0) {
