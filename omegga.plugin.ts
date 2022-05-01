@@ -41,7 +41,6 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
     const { pattern, callback } = joinMinigameMatcher(this);
     this.omegga.addMatcher(pattern, callback)
 
-    this.omegga.on('join', this.onJoin);
     this.omegga.on('leave', this.onLeave);
     this.omegga.on('start', () => {
       this.minigameCache = new Map<string, any>();
@@ -55,20 +54,6 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
 
     await this.store.set('minigameCache', Object.fromEntries(this.minigameCache));
     await this.store.set('playerStateCache', Object.fromEntries(this.playerStateCache));
-  }
-
-  onJoin = async (player) => {
-    const defaultMinigame = await this.getDefaultMinigame();
-    const minigame = this.minigameCache.get(defaultMinigame?.ruleset);
-    if (minigame) {
-      this.onMinigameJoin({
-        player: this.omegga.getPlayer(player.controller),
-        minigame
-      });
-    } else {
-      // Apparently this player joined before any minigames were cached or exactly when a minigame ended so lets just do this again later
-      setTimeout(() => this.onJoin(player), 1000)
-    }
   }
 
   onLeave = (player) => {
@@ -94,10 +79,18 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
     await this.store.set("subscriberNames", this.subscribers.map(subscriber => subscriber.name));
   }
 
-  onMinigameJoin = async (joinMinigame: JoinMinigame) => {
+  onMinigameJoin = async (joinMinigame: JoinMinigame, retryCount: number = 0) => {
+    const player = this.omegga.getPlayer(joinMinigame?.player?.name);
     const minigame = [...this.minigameCache.values()].find((minigame) => minigame.name === joinMinigame.minigame.name);
+    if (!player || !minigame) {
+      if (retryCount < 5) {
+        // handle creating minigame and joining the server
+        setTimeout(() => this.onMinigameJoin(joinMinigame, ++retryCount), 100)
+      }
+      return;
+    }
     if (minigame && joinMinigame) {
-      const player = this.omegga.getPlayer(joinMinigame.player.name);
+
       const joinMinigameEvent = {
         player: player,
         minigame: {
@@ -118,18 +111,19 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
   onMinigameLeave = async (player, joinMinigameEvent) => {
     if (player) {
       const playerState = this.playerStateCache.get(player.state);
-      if (playerState && playerState.minigame) {
+      const minigame = this.minigameCache.get(playerState?.ruleset)
+      if (playerState && minigame) {
         const newMinigame = joinMinigameEvent?.minigame;
         this.subscribers.forEach(subscriber => {
           subscriber.emitPlugin('leaveminigame', {
             player: player,
-            minigame: playerState.minigame,
+            minigame,
             newMinigame
           });
         })
       }
       if (joinMinigameEvent) {
-        this.playerStateCache.set(player.state, { playerState, ...joinMinigameEvent });
+        this.playerStateCache.set(player.state, { ruleset: joinMinigameEvent?.minigame?.ruleset });
       } else {
         // player left the game
         this.playerStateCache.delete(player.state);
@@ -146,7 +140,7 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
       const newMinigames = []
 
       minigameRounds.forEach((minigame) => {
-        const { ruleset, name, roundEnded } = minigame;
+        const { index, ruleset, name, roundEnded } = minigame;
         const minigameRoundCache = this.minigameCache.get(ruleset);
         if (minigameRoundCache) {
           if (minigameRoundCache.roundEnded && !roundEnded) {
@@ -156,7 +150,7 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
             endedRound.push(minigame);
             this.minigameCache.set(ruleset, minigame);
           }
-          if (minigameRoundCache.name != name) {
+          if (minigameRoundCache.name != name || minigameRoundCache.index != index ) {
             this.minigameCache.set(ruleset, minigame);
           }
         } else {
@@ -175,16 +169,6 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
           subscriber.emitPlugin('roundend', minigame);
         })
       })
-
-      for (const minigame of newMinigames) {
-        const minigameOwnerInMinigame = await this.getMinigameOwnerInMinigame(minigame.ruleset);
-        if (minigameOwnerInMinigame && this.playerStateCache.get(minigameOwnerInMinigame)?.minigame?.ruleset != minigame.ruleset) {
-          this.onMinigameJoin({
-            player: this.omegga.getPlayer(minigameOwnerInMinigame),
-            minigame
-          });
-        }
-      }
     }
   }
 
@@ -213,10 +197,10 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
       ),
     ]);
 
-    const globalIndex = +rulesets.find(ruleset => ruleset.groups?.name === 'GLOBAL').groups?.index;
+    const sortedRulesets = rulesets.sort((a,b) => b.groups?.ruleset.localeCompare(a.groups?.ruleset));
+    const globalIndex = rulesets.findIndex(ruleset => ruleset.groups?.name === 'GLOBAL');
 
-    return rulesets.map(ruleset => {
-      let index = +ruleset.groups?.index;
+    return sortedRulesets.map((ruleset,index) => {
       if (globalIndex || globalIndex === 0) {
         if (index > globalIndex) {
           index = --index;
@@ -310,6 +294,8 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
       const playerState = this.playerStateCache.get(state);
 
       if (playerState && leaderboard) {
+        const minigame = this.minigameCache.get(playerState.ruleset)
+
         if (!playerState.leaderboard) {
           this.playerStateCache.set(state, { ...playerState, leaderboard })
           return;
@@ -327,7 +313,7 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
         if(!changeIndex.every(val => val === 0)) {
           const newPlayerState = { ...playerState, leaderboard }
           const oldLeaderboard = playerState.leaderboard || [0,0,0];
-          const event = { ...newPlayerState, oldLeaderboard }
+          const event = { player: this.omegga.getPlayer(state), leaderboard, oldLeaderboard, minigame }
           this.subscribers.forEach(subscriber => {
             subscriber.emitPlugin('leaderboardchange', event);
           })

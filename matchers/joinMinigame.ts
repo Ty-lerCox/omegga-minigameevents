@@ -1,7 +1,8 @@
 import { JoinMinigame } from 'types';
 
-// [2022.04.26-01.53.35:004][443]LogBrickadia: Aware (fa577b9e-f2be-493f-a30a-3789b02ba70b) joining Ruleset GLOBAL
-const minigameJoinRegExp = /^(?<playerName>.+) \((?<id>\w{8}-\w{4}-\w{4}-\w{4}-\w{12})\) joining Ruleset (?<rulesetName>.+)$/;
+// [2022.05.01-21.23.32:132][315]LogBrickadia: Ruleset GLOBAL no saved checkpoint for player Aware (fa577b9e-f2be-493f-a30a-3789b02ba70b)
+// [2022.05.01-21.23.34:788][472]LogBrickadia: Ruleset Aware's Minigame loading saved checkpoint for player Aware (fa577b9e-f2be-493f-a30a-3789b02ba70b)!
+const minigameJoinRegExp = /^Ruleset (?<rulesetName>.+) (no saved checkpoint for player|loading saved checkpoint for player) (?<playerName>.+) \((?<id>\w{8}-\w{4}-\w{4}-\w{4}-\w{12})\)!*$/;
 
 const joinMinigameMatcher: any = plugin => {
   return {
@@ -11,10 +12,10 @@ const joinMinigameMatcher: any = plugin => {
       if (!logMatch) return;
 
       const { generator, data } = logMatch.groups;
-      // check if log is a world log
+      // check if log is a brickadia log
       if (generator !== 'LogBrickadia') return;
 
-      // match the log to the map change finish pattern
+      // match the log to the checkpoint pattern
       const matchJoin = data.match(minigameJoinRegExp);
       if (matchJoin?.groups?.rulesetName && matchJoin?.groups?.playerName && matchJoin?.groups?.id) {
         return {
