@@ -213,12 +213,27 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
       ),
     ]);
 
-    return rulesets.map(ruleset => ({
-      index: ruleset.groups?.index,
-      ruleset: ruleset.groups?.ruleset,
-      name: ruleset.groups?.name,
-      roundEnded: roundEndeds.find(roundEnd => roundEnd.groups?.ruleset === ruleset.groups?.ruleset)?.groups?.inSession === "False"
-    }));
+    const globalIndex = +rulesets.find(ruleset => ruleset.groups?.name === 'GLOBAL').groups?.index;
+
+    console.log(globalIndex);
+
+    return rulesets.map(ruleset => {
+      let index = +ruleset.groups?.index;
+      if (globalIndex || globalIndex === 0) {
+        if (index > globalIndex) {
+          index = --index;
+        } else if (index === globalIndex) {
+          index = -1
+        }
+      }
+
+      return {
+        index: index,
+        ruleset: ruleset.groups?.ruleset,
+        name: ruleset.groups?.name,
+        roundEnded: roundEndeds.find(roundEnd => roundEnd.groups?.ruleset === ruleset.groups?.ruleset)?.groups?.inSession === "False"
+      }
+    });
   }
 
 
