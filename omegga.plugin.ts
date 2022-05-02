@@ -292,18 +292,14 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
 
     leaderboardInfo.forEach(({state, leaderboard}) => {
       const playerState = this.playerStateCache.get(state);
+      const minigame = this.minigameCache.get(playerState?.ruleset);
 
-      if (playerState && leaderboard) {
-        const minigame = this.minigameCache.get(playerState.ruleset)
-
-        if (!playerState.leaderboard) {
-          this.playerStateCache.set(state, { ...playerState, leaderboard })
-          return;
-        }
+      if (minigame && playerState && leaderboard) {
+        const oldLeaderboard = playerState.leaderboard || [0,0,0];
 
         const changeIndex = [];
         for (const i in leaderboard) {
-          if (playerState.leaderboard[i] === leaderboard[i]) {
+          if (oldLeaderboard[i] === leaderboard[i]) {
             changeIndex[i] = 0;
           } else {
             changeIndex[i] = 1;
@@ -312,7 +308,6 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
 
         if(!changeIndex.every(val => val === 0)) {
           const newPlayerState = { ...playerState, leaderboard }
-          const oldLeaderboard = playerState.leaderboard || [0,0,0];
           const event = { player: this.omegga.getPlayer(state), leaderboard, oldLeaderboard, minigame }
           this.subscribers.forEach(subscriber => {
             subscriber.emitPlugin('leaderboardchange', event);
@@ -339,7 +334,7 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
     const playerStateLeaderboardRegExp =
       /^(?<index>\d+)\) BP_PlayerState_C (.+):PersistentLevel.(?<state>BP_PlayerState_C_\d+)\.LeaderboardData =$/;
     const leaderboardRegExp =
-      /^\t(?<index>\d+): (?<column>\d+)$/;
+      /^\t(?<index>\d+): (?<column>-?\d+)$/;
 
 
     let [leaderboards] = await Promise.all([
