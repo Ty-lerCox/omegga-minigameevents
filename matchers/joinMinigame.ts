@@ -5,19 +5,30 @@ import { JoinMinigame } from 'types';
 const minigameJoinRegExp = /^Ruleset (?<rulesetName>.+) (no saved checkpoint for player|loading saved checkpoint for player) (?<playerName>.+) \((?<id>\w{8}-\w{4}-\w{4}-\w{4}-\w{12})\)!*$/;
 
 const joinMinigameMatcher: any = plugin => {
+  plugin.joinTracker = {};
   return {
     // listen for commands messages
     pattern(_line, logMatch) {
       // line is not generic console log
       if (!logMatch) return;
 
-      const { generator, data } = logMatch.groups;
+      const { generator, data, date } = logMatch.groups;
       // check if log is a brickadia log
       if (generator !== 'LogBrickadia') return;
 
       // match the log to the checkpoint pattern
       const matchJoin = data.match(minigameJoinRegExp);
+
       if (matchJoin?.groups?.rulesetName && matchJoin?.groups?.playerName && matchJoin?.groups?.id) {
+        const [ymd, hms] = date.split('-');
+        const utc = new Date(ymd.replace(/\./g, '-') + ':' + hms.replace(/\./g, ':')).valueOf();
+
+        // holy shit brickadia is dumb and fires 2 checkpoint logs sometimes
+        if (plugin.joinTracker[data] + 100 >= utc) {
+          return;
+        }
+        plugin.joinTracker[data] = utc;
+
         return {
           player: {
             name: matchJoin.groups.playerName,

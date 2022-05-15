@@ -83,7 +83,7 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
     const player = this.omegga.getPlayer(joinMinigame?.player?.name);
     const minigame = [...this.minigameCache.values()].find((minigame) => minigame.name === joinMinigame.minigame.name);
     if (!player || !minigame) {
-      if (retryCount < 5) {
+      if (retryCount < 20) {
         // handle creating minigame and joining the server
         setTimeout(() => this.onMinigameJoin(joinMinigame, ++retryCount), 100)
       }
@@ -99,11 +99,12 @@ export default class Plugin implements OmeggaPlugin<Config, Storage> {
           index: minigame.index
         }
       }
+
+      this.onMinigameLeave(player, joinMinigameEvent);
+
       this.subscribers.forEach(subscriber => {
         subscriber.emitPlugin('joinminigame', joinMinigameEvent);
       })
-
-      this.onMinigameLeave(player, joinMinigameEvent);
     }
 
   }
